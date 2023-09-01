@@ -16,6 +16,11 @@ type User struct {
 	Photo		string
 	CreatedAt	time.Time	`gorm:"not null"`
 	UpdatedAt	time.Time	`gorm:"not null"`
+
+	OtpEnabled	bool		`gorm:"default:false;"`
+	OtpVerified	bool		`gorm:"default:false;"`
+	OtpSecret	string
+	OtpAuthUrl	string
 }
 
 type SignInInput struct {
@@ -40,4 +45,9 @@ type UserResponse struct {
 	Provider  string    `json:"provider"`
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
+}
+
+type OTPInput struct {
+	ID		string `json:"user_id"`
+	Token	string `json:"token"`
 }
