@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/pquerna/otp/totp"
 	"gorm.io/gorm"
 )
 
@@ -155,7 +156,14 @@ func (ac *AuthController) RefreshAccessToken(ctx *gin.Context) {
 	ctx.SetCookie("access_token", access_token, config.AccessTokenMaxAge*60, "/", "localhost", false, true)
 	ctx.SetCookie("logged_in", "true", config.AccessTokenMaxAge*60, "/", "localhost", false, false)
 
-	ctx.JSON(http.StatusOK, gin.H{"status": "success", "access_token": access_token})
+	userResponse := gin.H{
+		"id": user.ID.String(),
+		"name": user.Name,
+		"email": user.Email,
+		"otp_enabled": user.OtpEnabled,
+	}
+
+	ctx.JSON(http.StatusOK, gin.H{"status": "success", "access_token": access_token, "user": userResponse})
 }
 
 func (ac *AuthController) LogoutUser(ctx *gin.Context) {
@@ -226,4 +234,43 @@ func (ac *AuthController) GoogleOAuth(ctx *gin.Context) {
 	ctx.SetCookie("logged_in", "true", config.AccessTokenMaxAge*60, "/", "localhost", false, false)
 
 	ctx.Redirect(http.StatusTemporaryRedirect, fmt.Sprint(config.ClientOrigin, pathUrl))
+}
+
+func (ac *AuthController) GenerateOTP(ctx *gin.Context) {
+	var payload *models.OTPInput
+
+	if err := ctx.ShouldBindJSON(&payload); err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"status": "fail", "message": err.Error()})
+		return
+	}
+
+	key, err := totp.Generate(totp.GenerateOpts{
+		Issuer: "example.com",
+		AccountName: "admin@example.com",
+		SecretSize: 15,
+	})
+
+	if err != nil {
+		panic(err)
+	}
+
+	var user models.User
+	result := ac.DB.First(&user, "id = ?", payload.ID)
+	if result.Error != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"status": "fail", "message": "Invalid email or Password"})
+		return
+	}
+
+	dataToUpdate := models.User{
+		OtpSecret: key.Secret(),
+		OtpAuthUrl: key.URL(),
+	}
+
+	ac.DB.Model(&user).Updates(dataToUpdate)
+	
+	optResponse := gin.H{
+		"base32": key.Secret(),
+		"otpauth_url": key.URL(),
+	}
+	ctx.JSON(http.StatusOK, optResponse)
 }
