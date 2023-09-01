@@ -22,5 +22,10 @@ func (rc *AuthRouteController) AuthRoute(rg *gin.RouterGroup) {
 	router.POST("/login", rc.authController.SignInUser)
 	router.GET("/refresh", rc.authController.RefreshAccessToken)
 	router.GET("/logout", middleware.DeserializeUser(), rc.authController.LogoutUser)
+	router.GET("/verifyemail/:verificationCode", rc.authController.VerifyEmail)
 	router.POST("/oauth/google", rc.authController.GoogleOAuth)
+	router.POST("/otp/generate", rc.authController.GenerateOTP)
+	router.POST("/otp/verify", rc.authController.VerifyOTP)
+	router.POST("/otp/validate", rc.authController.ValidateOTP)
+	router.POST("/otp/disable", rc.authController.DisableOTP)
 }
