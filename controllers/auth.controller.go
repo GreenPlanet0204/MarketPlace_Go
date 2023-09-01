@@ -341,28 +341,5 @@ func (ac *AuthController) ValidateOTP(ctx *gin.Context) {
 }
 
 func (ac *AuthController) DisableOTP(ctx *gin.Context) {
-	var payload *models.OTPInput
-
-	if err := ctx.ShouldBindJSON(&payload); err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{"status": "fail", "message": err.Error()})
-		return
-	}
-
-	var user models.User
-	result := ac.DB.First(&user, "id = ?", payload.ID)
-	if result.Error != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{"status": "fail", "message": "User doesn't exist"})
-		return
-	}
-
-	user.OtpEnabled = false
-	ac.DB.Save(&user)
-
-	userResponse := gin.H{
-		"id":          user.ID.String(),
-		"name":        user.Name,
-		"email":       user.Email,
-		"otp_enabled": user.OtpEnabled,
-	}
-	ctx.JSON(http.StatusOK, gin.H{"status": "success", "user": userResponse})
+	
 }
