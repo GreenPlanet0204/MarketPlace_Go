@@ -67,6 +67,7 @@ func (ac *AuthController) SignUpUser(ctx *gin.Context) {
 		Email: newUser.Email,
 		Photo: newUser.Photo,
 		Role: newUser.Role,
+		Provider: newUser.Provider,
 		CreatedAt: newUser.CreatedAt,
 		UpdatedAt: newUser.UpdatedAt,
 	}
@@ -86,6 +87,10 @@ func (ac *AuthController) SignInUser(ctx *gin.Context) {
 	if result.Error != nil {
 		ctx.JSON(http.StatusBadRequest, gin.H{"status": "fail", "message": "Invalid email or Password"})
 		return
+	}
+
+	if user.Provider == "Google" {
+		ctx.JSON(http.StatusUnauthorized, gin.H{"status": "fail", "message": fmt.Sprintf("Use %v OAuth instead", user.Provider)})
 	}
 
 	if err := utils.VerifyPassword(user.Password, payload.Password); err != nil {
@@ -159,4 +164,66 @@ func (ac *AuthController) LogoutUser(ctx *gin.Context) {
 	ctx.SetCookie("logged_in", "", -1, "/", "localhost", false, false)
 
 	ctx.JSON(http.StatusOK, gin.H{"status": "success"})
+}
+
+func (ac *AuthController) GoogleOAuth(ctx *gin.Context) {
+	code := ctx.Query("code")
+	var pathUrl string = "/"
+
+	if ctx.Query("state") != "" {
+		pathUrl = ctx.Query("state")
+	}
+
+	if code == "" {
+		ctx.JSON(http.StatusUnauthorized, gin.H{"status": "fail", "message": "Authorization code not provided!"})
+		return
+	}
+
+	tokenRes, err := utils.GetGoogleOAuthToken(code)
+
+	if err != nil {
+		ctx.JSON(http.StatusBadGateway, gin.H{"status": "fail", "message": err.Error()})
+		return
+	}
+
+	google_user, err := utils.GetGoogleUser(tokenRes.AccessToken, tokenRes.IDToken)
+
+	if err != nil {
+		ctx.JSON(http.StatusBadGateway, gin.H{"status": "fail", "message": err.Error()})
+		return
+	}
+
+	now := time.Now()
+	email := strings.ToLower(google_user.Email)
+
+	user_data := models.User{
+		Name: google_user.Name,
+		Email: email,
+		Password: "",
+		Photo: google_user.Photo,
+		Provider: "Google",
+		Role: "user",
+		CreatedAt: now,
+		UpdatedAt: now,
+	}
+
+	if initializers.DB.Model(&user_data).Where("email = ?", email).Updates(&user_data).RowsAffected == 0 {
+		initializers.DB.Create(&user_data)
+	}
+
+	var user models.User
+	initializers.DB.First(&user, "email = ?", email)
+
+	config, _ := initializers.LoadConfig(".")
+
+	access_token, err := utils.CreateToken(config.AccessTokenExpiresIn, user.ID, config.AccessTokenPrivateKey)
+	if err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"status": "fail", "message": err.Error()})
+		return
+	}
+
+	ctx.SetCookie("access_token", access_token, config.AccessTokenMaxAge*60, "/", "localhost", false, true)
+	ctx.SetCookie("logged_in", "true", config.AccessTokenMaxAge*60, "/", "localhost", false, false)
+
+	ctx.Redirect(http.StatusTemporaryRedirect, fmt.Sprint(config.ClientOrigin, pathUrl))
 }

@@ -12,6 +12,7 @@ type User struct {
 	Email 		string		`gorm:"unique;not null"`
 	Password	string		`gorm:"not null"`
 	Role		string		`gorm:"type:varchar(20);not null"`
+	Provider	string		`gorm:"default:'local';"`
 	Photo		string
 	CreatedAt	time.Time	`gorm:"not null"`
 	UpdatedAt	time.Time	`gorm:"not null"`
@@ -36,6 +37,7 @@ type UserResponse struct {
 	Email     string    `json:"email,omitempty"`
 	Role      string    `json:"role,omitempty"`
 	Photo     string    `json:"photo,omitempty"`
+	Provider  string    `json:"provider"`
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
 }
