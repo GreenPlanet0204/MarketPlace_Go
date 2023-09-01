@@ -274,3 +274,72 @@ func (ac *AuthController) GenerateOTP(ctx *gin.Context) {
 	}
 	ctx.JSON(http.StatusOK, optResponse)
 }
+
+func (ac *AuthController) VerifyOTP(ctx *gin.Context) {
+	var payload *models.OTPInput
+
+	if err := ctx.ShouldBindJSON(&payload); err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"status": "fail", "message": err.Error()})
+		return
+	}
+
+	message := "Token is invalid or user doesn't exist"
+
+	var user models.User
+	result := ac.DB.First(&user, "id = ?", payload.ID)
+	if result.Error != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"status": "fail", "message": message})
+		return
+	}
+
+	valid := totp.Validate(payload.Token, user.OtpSecret)
+	if !valid {
+		ctx.JSON(http.StatusBadRequest, gin.H{"status": "fail", "message": message})
+		return
+	}
+
+	dataToUpdate := models.User{
+		OtpEnabled:  true,
+		OtpVerified: true,
+	}
+
+	ac.DB.Model(&user).Updates(dataToUpdate)
+
+	userResponse := gin.H{
+		"id":          user.ID.String(),
+		"name":        user.Name,
+		"email":       user.Email,
+		"otp_enabled": user.OtpEnabled,
+	}
+	ctx.JSON(http.StatusOK, gin.H{"otp_verified": true, "user": userResponse})
+}
+
+func (ac *AuthController) ValidateOTP(ctx *gin.Context) {
+	var payload *models.OTPInput
+
+	if err := ctx.ShouldBindJSON(&payload); err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"status": "fail", "message": err.Error()})
+		return
+	}
+
+	message := "Token is invalid or user doesn't exist"
+
+	var user models.User
+	result := ac.DB.First(&user, "id = ?", payload.ID)
+	if result.Error != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"status": "fail", "message": message})
+		return
+	}
+
+	valid := totp.Validate(payload.Token, user.OtpSecret)
+	if !valid {
+		ctx.JSON(http.StatusBadRequest, gin.H{"status": "fail", "message": message})
+		return
+	}
+
+	ctx.JSON(http.StatusOK, gin.H{"otp_valid": true})
+}
+
+func (ac *AuthController) DisableOTP(ctx *gin.Context) {
+	
+}
