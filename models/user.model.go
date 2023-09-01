@@ -17,6 +17,9 @@ type User struct {
 	CreatedAt	time.Time	`gorm:"not null"`
 	UpdatedAt	time.Time	`gorm:"not null"`
 
+	Verified	bool		`gorm:"not null"`
+	Code		string
+
 	OtpEnabled	bool		`gorm:"default:false;"`
 	OtpVerified	bool		`gorm:"default:false;"`
 	OtpSecret	string
