@@ -47,6 +47,7 @@ func (ac *AuthController) SignUpUser(ctx *gin.Context) {
 		Email: strings.ToLower(payload.Email),
 		Password: hashedPassword,
 		Role: "user",
+		Verified: false,
 		Photo: payload.Photo,
 		CreatedAt: now,
 		UpdatedAt: now,
@@ -62,17 +63,58 @@ func (ac *AuthController) SignUpUser(ctx *gin.Context) {
 		return
 	}
 
-	userResponse := &models.UserResponse{
-		ID: newUser.ID,
-		Name: newUser.Name,
-		Email: newUser.Email,
-		Photo: newUser.Photo,
-		Role: newUser.Role,
-		Provider: newUser.Provider,
-		CreatedAt: newUser.CreatedAt,
-		UpdatedAt: newUser.UpdatedAt,
+	config, _ := initializers.LoadConfig(".")
+
+	// Generate Verification Code
+	code := randstr.String(20)
+
+	verification_code := utils.Encode(code)
+
+	// Update User in Database
+	newUser.Code = verification_code
+	ac.DB.Save(newUser)
+
+	var firstName = newUser.Name
+
+	if strings.Contains(firstName, " ") {
+		firstName = strings.Split(firstName, " ")[1]
 	}
-	ctx.JSON(http.StatusCreated, gin.H{"status": "success", "data": gin.H{"user": userResponse}})
+
+	// ? Send Email
+	emailData := utils.EmailData{
+		URL:       config.ClientOrigin + "/verifyemail/" + code,
+		FirstName: firstName,
+		Subject:   "Your account verification code",
+	}
+
+	utils.SendEmail(&newUser, &emailData)
+
+	message := "We sent an email with a verification code to " + newUser.Email
+	ctx.JSON(http.StatusCreated, gin.H{"status": "success", "message": message})
+}
+
+func (ac *AuthController) VerifyEmail(ctx *gin.Context) {
+
+	code := ctx.Params.ByName("verificationCode")
+	verification_code := utils.Encode(code)
+
+	var updatedUser models.User
+	result := ac.DB.First(&updatedUser, "verification_code = ?", verification_code)
+	if result.Error != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"status": "fail", "message": "Invalid verification code or user doesn't exists"})
+		return
+	}
+
+	if updatedUser.Verified {
+		ctx.JSON(http.StatusConflict, gin.H{"status": "fail", "message": "User already verified"})
+		return
+	}
+
+	updatedUser.Code = ""
+	updatedUser.Verified = true
+	ac.DB.Save(&updatedUser)
+
+	ctx.JSON(http.StatusOK, gin.H{"status": "success", "message": "Email verified successfully"})
 }
 
 func (ac *AuthController) SignInUser(ctx *gin.Context) {
@@ -92,6 +134,11 @@ func (ac *AuthController) SignInUser(ctx *gin.Context) {
 
 	if user.Provider == "Google" {
 		ctx.JSON(http.StatusUnauthorized, gin.H{"status": "fail", "message": fmt.Sprintf("Use %v OAuth instead", user.Provider)})
+	}
+
+	if !user.Verified {
+		ctx.JSON(http.StatusForbidden, gin.H{"status": "fail", "message": "Please verify your email"})
+		return
 	}
 
 	if err := utils.VerifyPassword(user.Password, payload.Password); err != nil {
@@ -341,5 +388,28 @@ func (ac *AuthController) ValidateOTP(ctx *gin.Context) {
 }
 
 func (ac *AuthController) DisableOTP(ctx *gin.Context) {
-	
+	var payload *models.OTPInput
+
+	if err := ctx.ShouldBindJSON(&payload); err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"status": "fail", "message": err.Error()})
+		return
+	}
+
+	var user models.User
+	result := ac.DB.First(&user, "id = ?", payload.ID)
+	if result.Error != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"status": "fail", "message": "User doesn't exist"})
+		return
+	}
+
+	user.OtpEnabled = false
+	ac.DB.Save(&user)
+
+	userResponse := gin.H{
+		"id":          user.ID.String(),
+		"name":        user.Name,
+		"email":       user.Email,
+		"otp_enabled": user.OtpEnabled,
+	}
+	ctx.JSON(http.StatusOK, gin.H{"status": "success", "user": userResponse})
 }
