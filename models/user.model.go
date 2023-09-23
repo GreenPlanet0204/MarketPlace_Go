@@ -20,6 +20,9 @@ type User struct {
 	Verified	bool		`gorm:"not null"`
 	Code		string
 
+	PasswordResetToken 	string
+	PasswordResetAt		time.Time
+
 	OtpEnabled	bool		`gorm:"default:false;"`
 	OtpVerified	bool		`gorm:"default:false;"`
 	OtpSecret	string
@@ -53,4 +56,13 @@ type UserResponse struct {
 type OTPInput struct {
 	ID		string `json:"user_id"`
 	Token	string `json:"token"`
+}
+
+type ForgotPasswordInput struct {
+	Email string `json:"email" binding:"required"`
+}
+
+type ResetPasswordInput struct {
+	Password string `json:"password" binding:"required"`
+	PasswordConfirm string `json:"passwordConfirm" binding:"required"`
 }
